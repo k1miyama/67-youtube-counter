@@ -58,3 +58,9 @@ Possible matches:
 
 Transcript timings are approximate because YouTube captions are snippet-level,
 not exact word-level timings.
+
+## Example Output
+
+https://github.com/user-attachments/assets/045c7ca5-f727-4f58-90f3-52e2338a4256
+
+
