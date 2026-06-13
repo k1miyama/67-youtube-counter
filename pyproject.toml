@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sixseven-counter"
+version = "0.3.0"
+description = "Find 67 moments in YouTube transcripts and render a supercut."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "youtube-transcript-api>=1.2,<2",
+    "yt-dlp>=2024.1.1",
+    "imageio-ffmpeg>=0.5.1",
+]
+
+[project.scripts]
+sixseven = "sixseven_counter.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["sixseven_counter*"]
