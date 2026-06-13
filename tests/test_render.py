@@ -8,7 +8,10 @@ from sixseven_counter.render import (
     build_concat_command,
     build_normalize_command,
     build_ytdlp_command,
+    build_ytdlp_options,
     render_supercut,
+    reset_ytdlp_ffmpeg_location,
+    set_ytdlp_ffmpeg_location,
 )
 
 
@@ -33,6 +36,47 @@ class RenderTests(unittest.TestCase):
         concat = build_concat_command(Path("concat.txt"), Path("67_supercut.mp4"), "ffmpeg")
         self.assertEqual(concat[:4], ["ffmpeg", "-y", "-f", "concat"])
 
+    def test_builds_ytdlp_options_for_in_process_download(self):
+        segment = ClipSegment(index=1, start=1.25, end=3.5, match_ids=["confirmed_001"])
+
+        def fake_range_func(chapters, ranges):
+            return {"chapters": chapters, "ranges": ranges}
+
+        opts = build_ytdlp_options(
+            segment=segment,
+            output_template=Path("clips/clip_001.%(ext)s"),
+            quality=720,
+            ffmpeg_path="ffmpeg",
+            download_range_func=fake_range_func,
+        )
+        self.assertEqual(opts["format"], "bv*[height<=720]+ba/b[height<=720]/best")
+        self.assertEqual(opts["download_ranges"], {"chapters": [], "ranges": [[1.25, 3.5]]})
+        self.assertEqual(opts["outtmpl"], {"default": "clips\\clip_001.%(ext)s" if sys.platform == "win32" else "clips/clip_001.%(ext)s"})
+        self.assertTrue(opts["force_keyframes_at_cuts"])
+
+    def test_sets_and_resets_ytdlp_ffmpeg_location(self):
+        class FakeLocation:
+            value = None
+            reset_token = None
+
+            @classmethod
+            def set(cls, value):
+                cls.value = value
+                return "token"
+
+            @classmethod
+            def reset(cls, token):
+                cls.reset_token = token
+
+        class FakeFFmpegPostProcessor:
+            _ffmpeg_location = FakeLocation
+
+        token = set_ytdlp_ffmpeg_location("ffmpeg-path", FakeFFmpegPostProcessor)
+        reset_ytdlp_ffmpeg_location(token, FakeFFmpegPostProcessor)
+
+        self.assertEqual(FakeLocation.value, "ffmpeg-path")
+        self.assertEqual(FakeLocation.reset_token, "token")
+
     def test_dry_run_writes_command_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = render_supercut(
@@ -49,4 +93,3 @@ class RenderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

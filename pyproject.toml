@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sixseven-counter"
-version = "0.3.0"
+version = "1.0.0"
 description = "Find 67 moments in YouTube transcripts and render a supercut."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,6 +16,11 @@ dependencies = [
 
 [project.scripts]
 sixseven = "sixseven_counter.cli:main"
+
+[project.optional-dependencies]
+build = [
+    "pyinstaller>=6.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["sixseven_counter*"]

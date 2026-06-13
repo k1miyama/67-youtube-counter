@@ -17,7 +17,10 @@ The package installs:
 
 ## Use The App
 
-Launch the standalone desktop UI:
+Download `67-counter-v1.0.0-windows-x64.exe` from the GitHub release, then
+double-click it.
+
+For development, launch the app from source:
 
 ```powershell
 .\.venv\Scripts\python.exe -m sixseven_counter.ui

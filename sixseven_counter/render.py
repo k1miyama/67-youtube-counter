@@ -77,7 +77,17 @@ def render_supercut(
         )
         commands.append(ytdlp_command)
         if not dry_run:
-            command_runner(ytdlp_command)
+            if runner:
+                command_runner(ytdlp_command)
+            else:
+                download_segment_with_ytdlp(
+                    url=url,
+                    segment=segment,
+                    output_template=raw_template,
+                    quality=quality,
+                    ffmpeg_path=ffmpeg,
+                    cookies=cookies,
+                )
 
         raw_clip = clips_dir / f"{stem}.mp4" if dry_run else _find_downloaded_clip(clips_dir, stem)
         normalized_clip = normalized_dir / f"{stem}.mp4"
@@ -117,10 +127,31 @@ def build_ytdlp_command(
     ffmpeg_path: str,
     cookies: Path | None = None,
 ) -> list[str]:
-    command = [
+    return [
         sys.executable,
         "-m",
         "yt_dlp",
+        *build_ytdlp_args(
+            url=url,
+            segment=segment,
+            output_template=output_template,
+            quality=quality,
+            ffmpeg_path=ffmpeg_path,
+            cookies=cookies,
+        ),
+    ]
+
+
+def build_ytdlp_args(
+    *,
+    url: str,
+    segment: ClipSegment,
+    output_template: Path,
+    quality: int,
+    ffmpeg_path: str,
+    cookies: Path | None = None,
+) -> list[str]:
+    args = [
         "--no-playlist",
         "--quiet",
         "--no-warnings",
@@ -139,9 +170,94 @@ def build_ytdlp_command(
         str(output_template),
     ]
     if cookies:
-        command.extend(["--cookies", str(cookies)])
-    command.append(url)
-    return command
+        args.extend(["--cookies", str(cookies)])
+    args.append(url)
+    return args
+
+
+def download_segment_with_ytdlp(
+    *,
+    url: str,
+    segment: ClipSegment,
+    output_template: Path,
+    quality: int,
+    ffmpeg_path: str,
+    cookies: Path | None = None,
+) -> None:
+    try:
+        from yt_dlp import YoutubeDL
+        from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
+        from yt_dlp.utils import download_range_func
+    except ImportError as exc:
+        raise SixSevenError(
+            "yt-dlp is not installed. Install dependencies or use the standalone release build."
+        ) from exc
+
+    ydl_opts = build_ytdlp_options(
+        segment=segment,
+        output_template=output_template,
+        quality=quality,
+        ffmpeg_path=ffmpeg_path,
+        cookies=cookies,
+        download_range_func=download_range_func,
+    )
+    ffmpeg_token = set_ytdlp_ffmpeg_location(ffmpeg_path, FFmpegPostProcessor)
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            result = ydl.download([url])
+    except Exception as exc:
+        raise SixSevenError(f"yt-dlp failed while downloading a clip: {exc}") from exc
+    finally:
+        reset_ytdlp_ffmpeg_location(ffmpeg_token, FFmpegPostProcessor)
+
+    if result:
+        raise SixSevenError(f"yt-dlp failed while downloading a clip: exit code {result}")
+
+
+def set_ytdlp_ffmpeg_location(ffmpeg_path: str, ffmpeg_postprocessor_cls: object) -> object:
+    return ffmpeg_postprocessor_cls._ffmpeg_location.set(ffmpeg_path)
+
+
+def reset_ytdlp_ffmpeg_location(token: object, ffmpeg_postprocessor_cls: object) -> None:
+    ffmpeg_postprocessor_cls._ffmpeg_location.reset(token)
+
+
+def build_ytdlp_options(
+    *,
+    segment: ClipSegment,
+    output_template: Path,
+    quality: int,
+    ffmpeg_path: str,
+    cookies: Path | None = None,
+    download_range_func: Callable | None = None,
+) -> dict:
+    if download_range_func is None:
+        from yt_dlp.utils import download_range_func as yt_dlp_download_range_func
+
+        download_range_func = yt_dlp_download_range_func
+
+    opts = {
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "ffmpeg_location": ffmpeg_path,
+        "format": f"bv*[height<={quality}]+ba/b[height<={quality}]/best",
+        "merge_output_format": "mp4",
+        "final_ext": "mp4",
+        "outtmpl": {"default": str(output_template)},
+        "download_ranges": download_range_func(
+            [],
+            [[float(segment.start), float(segment.end)]],
+        ),
+        "force_keyframes_at_cuts": True,
+        "postprocessors": [
+            {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
+            {"key": "FFmpegConcat", "only_multi_video": True, "when": "playlist"},
+        ],
+    }
+    if cookies:
+        opts["cookiefile"] = str(cookies)
+    return opts
 
 
 def build_normalize_command(input_path: Path, output_path: Path, ffmpeg_path: str) -> list[str]:
